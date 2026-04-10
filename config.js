@@ -2,7 +2,7 @@
 // ROTATION_ENABLED is set at runtime by introNext() based on selected condition.
 
 export const CONFIG = {
-  SEED:                  14,    // Deterministic RNG seed (all conditions use 14 for cross-condition consistency)
+  SEED:                  19,    // Deterministic RNG seed (all conditions use 14 for cross-condition consistency)
   TRIALS_PER_BLOCK:      5,     // Number of trials in Block A
   TIME_LIMIT_SECONDS:    300,   // 5-minute time limit for Block A
   REST_SECONDS:          60,    // Rest interval between blocks (reserved)
