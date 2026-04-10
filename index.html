@@ -1,0 +1,2397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shape Rotation Task</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ================================================================
+   RESET & CSS VARIABLES
+   ================================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #3a3a3a;
+  --surface:   #484848;
+  --surface2:  #525252;
+  --surface3:  #5e5e5e;
+  --accent:    #ffffff;
+  --text:      #f0f0f0;
+  --muted:     #aaaaaa;
+  --correct:   #4caf50;
+  --wrong:     #ef5350;
+  --selected:  #e0e0e0;
+  --border:    #666666;
+  --radius:    8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
+html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
+
+/* ================================================================
+   SCREENS
+   ================================================================ */
+.screen {
+  position: fixed; inset: 0; z-index: 10;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 24px; overflow-y: auto;
+}
+.screen.active { display: flex; }
+
+/* ================================================================
+   CARD
+   ================================================================ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 36px 44px;
+  width: 100%; max-width: 720px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5);
+}
+.card h1 { font-size: 2rem; font-weight: 700; margin-bottom: 4px; }
+.card h2 { font-size: 1.4rem; font-weight: 600; color: var(--accent); margin-bottom: 16px; }
+.card p  { color: var(--muted); line-height: 1.75; margin-bottom: 10px; font-size: .95rem; }
+.card ul { padding-left: 20px; color: var(--muted); line-height: 2.2; font-size: .95rem; margin-bottom: 10px; }
+.card li strong { color: var(--text); }
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+/* ================================================================
+   BUTTONS
+   ================================================================ */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 28px;
+  background: var(--accent); color: #111111;
+  border: none; border-radius: var(--radius);
+  font-size: .95rem; font-weight: 600;
+  cursor: pointer; transition: opacity .15s, transform .1s;
+  margin-top: 18px;
+}
+.btn:hover { opacity: .85; }
+.btn:active { transform: scale(.97); }
+.btn.ghost { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+.btn.vr-btn { background: #4a90e2; color: #fff; border: none; }
+.btn.vr-btn:hover { opacity: .85; }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ================================================================
+   TEXT INPUTS
+   ================================================================ */
+.field { margin-top: 14px; }
+.field label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+input[type=text], textarea, select {
+  width: 100%; padding: 10px 14px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: .95rem;
+  font-family: inherit; outline: none; transition: border-color .15s;
+}
+input[type=text]:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 80px; }
+select {
+  appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23aaaaaa' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+  padding-right: 38px;
+}
+select option { background: var(--surface2); }
+
+/* kbd pill */
+.kbd {
+  display: inline-block; padding: 1px 6px;
+  background: var(--surface3); border: 1px solid var(--border);
+  border-radius: 4px; font-family: monospace; font-size: .8rem;
+}
+
+/* ================================================================
+   CONDITION SELECTOR
+   ================================================================ */
+.condition-grid {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  justify-content: center; margin-top: 24px;
+}
+.condition-card {
+  background: var(--surface2); border: 2px solid var(--border);
+  border-radius: 12px; padding: 24px 32px; cursor: pointer;
+  text-align: center; transition: border-color .2s, transform .1s;
+  min-width: 160px; flex: 1; max-width: 200px;
+  user-select: none;
+}
+.condition-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.condition-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+.condition-card p  { font-size: .8rem; color: var(--muted); line-height: 1.5; margin: 0; }
+.condition-card .vr-note { font-size: .72rem; color: #4a90e2; margin-top: 8px; }
+
+/* ================================================================
+   TRIAL SCREEN LAYOUT
+   ================================================================ */
+#screen-trial {
+  position: fixed; inset: 0; z-index: 10;
+  display: none; flex-direction: column;
+  background: var(--bg);
+}
+#screen-trial.active { display: flex; }
+
+/* Header bar */
+#trial-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; height: 52px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; gap: 16px;
+}
+#block-label {
+  font-weight: 700; font-size: .8rem;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--accent);
+  white-space: nowrap;
+}
+#trial-progress { font-size: .9rem; color: var(--muted); }
+#timer-display {
+  font-size: 1rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 14px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  min-width: 70px; text-align: center;
+}
+#timer-display.warn { color: var(--wrong); animation: blink 1s step-start infinite; }
+@keyframes blink { 50% { opacity: .4; } }
+
+/* Main body */
+#trial-body {
+  flex: 1; display: flex; gap: 20px;
+  padding: 16px 24px; overflow: hidden; min-height: 0;
+}
+
+/* Target panel */
+#target-panel {
+  flex: 0 0 36%; display: flex; flex-direction: column; gap: 10px;
+}
+.panel-label {
+  font-size: .75rem; text-transform: uppercase;
+  letter-spacing: 2px; color: var(--muted); flex-shrink: 0;
+}
+
+/* Figure container */
+.figure-container {
+  position: relative; flex: 1;
+  background: var(--surface);
+  border: 2px solid var(--border); border-radius: 12px;
+  overflow: hidden; user-select: none; min-height: 0;
+  transition: border-color .2s;
+}
+.figure-container canvas { display: block; width: 100% !important; height: 100% !important; }
+.figure-container.selected { border-color: var(--selected); }
+.figure-container.feedback-correct { border-color: var(--correct); }
+.figure-container.feedback-wrong   { border-color: var(--wrong); }
+
+/* Reset button */
+.reset-btn {
+  position: absolute; bottom: 8px; right: 8px;
+  padding: 4px 10px; font-size: .72rem;
+  background: rgba(0,0,0,.55); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 4px;
+  cursor: pointer; backdrop-filter: blur(4px);
+  transition: color .15s, border-color .15s; z-index: 2;
+}
+.reset-btn:hover { color: var(--text); border-color: var(--muted); }
+
+/* Options panel */
+#options-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+#options-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr; gap: 14px; flex: 1; min-height: 0;
+}
+.opt-wrap { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.opt-wrap .figure-container { flex: 1; cursor: default; min-height: 0; }
+
+.opt-footer {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+}
+.key-badge {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; font-size: .8rem; font-weight: 700;
+  transition: background .15s, border-color .15s;
+  flex-shrink: 0;
+}
+.opt-wrap.selected  .key-badge { background: var(--selected); border-color: var(--selected); color: #fff; }
+.opt-wrap.fb-correct .key-badge { background: var(--correct);  border-color: var(--correct);  color: #fff; }
+.opt-wrap.fb-wrong   .key-badge { background: var(--wrong);    border-color: var(--wrong);    color: #fff; }
+
+/* Footer bar */
+#trial-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 24px; height: 56px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  flex-shrink: 0; gap: 12px;
+}
+#selection-info { font-size: .88rem; color: var(--muted); white-space: nowrap; }
+#kbd-hint       { font-size: .78rem; color: var(--muted); }
+#submit-btn {
+  padding: 9px 26px; background: var(--accent); color: #111111;
+  border: none; border-radius: var(--radius);
+  font-size: .9rem; font-weight: 700; cursor: pointer;
+  transition: opacity .15s;
+}
+#submit-btn:hover:not(:disabled) { opacity: .85; }
+#submit-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+/* Practice feedback banner */
+#feedback-banner {
+  position: fixed; bottom: 72px; left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 24px; border-radius: 8px;
+  font-weight: 700; font-size: .95rem;
+  pointer-events: none; opacity: 0;
+  transition: opacity .25s; z-index: 100;
+}
+#feedback-banner.show { opacity: 1; }
+#feedback-banner.ok  { background: var(--correct); color: #fff; }
+#feedback-banner.err { background: var(--wrong);   color: #fff; }
+
+/* Fixation cross overlay */
+.fixation-overlay {
+  position: fixed; inset: 0;
+  background: rgba(58,58,58,.92);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 52px; color: #f0f0f0; z-index: 200;
+  pointer-events: none;
+}
+
+/* Entrance animation */
+@keyframes fadeScale {
+  from { opacity: 0; transform: scale(.9); }
+  to   { opacity: 1; transform: scale(1);  }
+}
+.entering { animation: fadeScale .3s ease-out both; }
+
+/* ================================================================
+   DEBRIEF SCREEN
+   ================================================================ */
+.score-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 12px; margin: 18px 0;
+}
+.score-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; text-align: center;
+}
+.score-card .val { font-size: 1.9rem; font-weight: 700; color: var(--accent); }
+.score-card .lbl { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+.export-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+
+/* Save-to-sheet status indicator */
+#save-status { font-size: .85rem; color: var(--muted); margin-top: 8px; min-height: 1.2em; }
+
+/* ================================================================
+   VR CANVAS (hidden until VR session starts)
+   ================================================================ */
+#vr-canvas {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: none; z-index: 0;
+}
+
+/* ================================================================
+   LOADING OVERLAY
+   ================================================================ */
+#loading {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; color: var(--muted); z-index: 999;
+}
+</style>
+</head>
+<body>
+
+<div id="loading">Loading…</div>
+
+<!-- WebXR canvas — hidden until VR condition is entered -->
+<canvas id="vr-canvas"></canvas>
+
+<!-- ================================================================
+     SCREEN: CONDITION SELECTION (shown first)
+     ================================================================ -->
+<div class="screen" id="screen-condition">
+  <div class="card" style="max-width:680px;text-align:center">
+    <h1>Shape Rotation Task</h1>
+    <h2>Select Your Condition</h2>
+    <p>Choose the version that matches your experimental setup.</p>
+    <div class="condition-grid">
+      <div class="condition-card" onclick="selectCondition('2D')">
+        <h3>Desktop – No Rotation</h3>
+        <p>Static figures<br>Click to select answers</p>
+      </div>
+      <div class="condition-card" onclick="selectCondition('3D')">
+        <h3>Desktop – Rotation</h3>
+        <p>Drag to rotate target<br>Click to select answers</p>
+      </div>
+      <div class="condition-card" onclick="selectCondition('VR-NR')">
+        <h3>VR – No Rotation</h3>
+        <p>Fixed target shape<br>WebXR headset required</p>
+        <p class="vr-note">Open in Meta Quest Browser</p>
+      </div>
+      <div class="condition-card" onclick="selectCondition('VR')">
+        <h3>VR – Rotation</h3>
+        <p>Rotate target with hands<br>WebXR headset required</p>
+        <p class="vr-note">Open in Meta Quest Browser</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN: INTRO — participant ID + sector
+     ================================================================ -->
+<div class="screen" id="screen-intro">
+  <div class="card">
+    <h1>Shape Rotation Task</h1>
+    <div id="intro-desc"></div>
+    <div class="field">
+      <label for="sector">Sector</label>
+      <select id="sector">
+        <option value="">— select your sector —</option>
+        <option value="D&amp;E">D&amp;E</option>
+        <option value="CS">CS</option>
+        <option value="Manufacturing">Manufacturing</option>
+        <option value="IT &amp; Data">IT &amp; Data</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="role">Role</label>
+      <input type="text" id="role" placeholder="e.g. Design Engineer, Operator…" maxlength="80" autocomplete="off">
+    </div>
+    <button class="btn" id="intro-btn" disabled onclick="introNext()">Continue →</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN: INSTRUCTIONS
+     ================================================================ -->
+<div class="screen" id="screen-instructions">
+  <div class="card" style="max-width:760px">
+    <h2>Instructions</h2>
+    <p><strong>Your task:</strong> For each trial, select the <strong>two</strong> answer options
+       (out of four) that show the <em>same</em> shape as the target — just rotated. The other
+       two are mirror-flipped and will never match no matter how you rotate them.</p>
+    <ul id="instruction-list">
+      <!-- Populated by selectCondition() -->
+    </ul>
+    <hr class="divider">
+    <p id="instruction-timing" style="font-size:.9rem;color:var(--muted)">
+      You will have <strong>5 minutes</strong> for the test block. Work as quickly
+      and accurately as you can. The test block has no time limit and will show
+      whether your answers are correct.
+    </p>
+    <button class="btn" onclick="beginPractice()">Start Practice →</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN: TRIAL (shared for practice + test blocks)
+     ================================================================ -->
+<div id="screen-trial">
+  <div id="trial-header">
+    <span id="block-label">Test Block</span>
+    <span id="trial-progress">Trial 1 of 4</span>
+    <span id="timer-display">—</span>
+  </div>
+
+  <div id="trial-body">
+    <!-- Target figure (left, large) -->
+    <div id="target-panel">
+      <span class="panel-label">Target Object</span>
+      <div class="figure-container" id="tc">
+        <button class="reset-btn" id="reset-btn" onclick="resetFig(0)" title="Reset rotation">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- Answer options (right, 2×2 grid) -->
+    <div id="options-panel">
+      <span class="panel-label">Select the two that match the target</span>
+      <div id="options-grid">
+        <div class="opt-wrap" id="ow-0">
+          <div class="figure-container" id="oc-0" onclick="handleOptClick(0,event)"></div>
+          <div class="opt-footer"><span class="key-badge" id="kb-0">A</span></div>
+        </div>
+        <div class="opt-wrap" id="ow-1">
+          <div class="figure-container" id="oc-1" onclick="handleOptClick(1,event)"></div>
+          <div class="opt-footer"><span class="key-badge" id="kb-1">B</span></div>
+        </div>
+        <div class="opt-wrap" id="ow-2">
+          <div class="figure-container" id="oc-2" onclick="handleOptClick(2,event)"></div>
+          <div class="opt-footer"><span class="key-badge" id="kb-2">C</span></div>
+        </div>
+        <div class="opt-wrap" id="ow-3">
+          <div class="figure-container" id="oc-3" onclick="handleOptClick(3,event)"></div>
+          <div class="opt-footer"><span class="key-badge" id="kb-3">D</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="trial-footer">
+    <span id="selection-info">Select 2 answers (0 selected)</span>
+    <span id="kbd-hint">
+      <span class="kbd">A</span>–<span class="kbd">D</span> select &nbsp;·&nbsp;
+      <span class="kbd">Enter</span> submit
+    </span>
+    <button id="submit-btn" disabled onclick="submitTrial()">Submit</button>
+  </div>
+</div>
+
+<div id="feedback-banner"></div>
+
+<!-- ================================================================
+     SCREEN: VR READY (shown after intro for VR condition)
+     ================================================================ -->
+<div class="screen" id="screen-vr-ready">
+  <div class="card" style="text-align:center;max-width:500px">
+    <h2>Ready to Enter VR</h2>
+    <p>Your participant info is recorded. Put on your headset and click the button below.</p>
+    <button class="btn vr-btn" id="enter-vr-btn" disabled>Checking WebXR…</button>
+    <p id="vr-status" style="margin-top:12px;font-size:.85rem;color:var(--muted)"></p>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN: DEBRIEF
+     ================================================================ -->
+<div class="screen" id="screen-debrief">
+  <div class="card" style="max-width:760px">
+    <h2>Test Complete — Thank You</h2>
+    <div class="score-grid" id="score-grid"></div>
+    <p id="save-status"></p>
+    <hr class="divider">
+    <div class="field" id="strategy-field">
+      <label for="strategy">Strategy question: briefly describe how you approached the task</label>
+      <textarea id="strategy" rows="3" placeholder="e.g. I tried to mentally rotate the whole figure at once…"></textarea>
+    </div>
+    <div class="export-row">
+      <button class="btn"       onclick="exportJSON()">⬇ Download JSON (full log)</button>
+      <button class="btn ghost" onclick="exportCSV()">⬇ Download CSV (trial data)</button>
+      <button class="btn ghost" onclick="downloadSheetCSV()">⬇ Download all results (CSV)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT — ES module
+     ================================================================ -->
+<script type="module">
+import { CONFIG } from './config.js';
+import { submitResult, downloadSheetCSV as _downloadSheetCSV } from './db.js';
+
+/* ================================================================
+   SHEPARD-METZLER FIGURE DEFINITIONS
+   ================================================================ */
+const BASE_FIGURES = [
+  [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0],[2,2,1],[2,2,2],[3,2,2],[4,2,2],[4,3,2]],
+  [[0,0,0],[0,1,0],[0,2,0],[1,2,0],[2,2,0],[2,2,1],[2,2,2],[2,1,2],[2,0,2],[3,0,2]],
+  [[0,0,0],[1,0,0],[2,0,0],[3,0,0],[3,1,0],[3,2,0],[3,2,1],[3,2,2],[3,2,3],[2,2,3]],
+  [[0,0,0],[0,0,1],[0,0,2],[0,1,2],[0,2,2],[1,2,2],[2,2,2],[2,2,1],[2,2,0],[2,3,0]],
+  [[0,0,0],[1,0,0],[1,1,0],[1,2,0],[1,3,0],[1,3,1],[1,3,2],[0,3,2],[0,3,3],[0,3,4]],
+  [[0,0,0],[0,0,1],[0,0,2],[0,0,3],[1,0,3],[2,0,3],[2,1,3],[2,2,3],[2,2,2],[2,2,1]],
+  [[0,0,0],[1,0,0],[2,0,0],[2,0,1],[2,0,2],[2,1,2],[2,2,2],[1,2,2],[0,2,2],[0,2,3]],
+  [[0,0,0],[0,1,0],[0,2,0],[0,2,1],[0,2,2],[1,2,2],[2,2,2],[2,2,3],[2,2,4],[3,2,4]],
+  [[0,0,0],[1,0,0],[1,0,1],[1,0,2],[1,1,2],[1,2,2],[1,2,3],[1,2,4],[2,2,4],[3,2,4]],
+  [[0,0,0],[0,0,1],[0,0,2],[1,0,2],[2,0,2],[2,1,2],[2,2,2],[2,3,2],[2,3,1],[2,3,0]],
+  [[0,0,0],[0,1,0],[0,2,0],[0,3,0],[1,3,0],[2,3,0],[2,3,1],[2,3,2],[1,3,2],[0,3,2]],
+  [[0,0,0],[1,0,0],[1,1,0],[1,1,1],[1,1,2],[2,1,2],[3,1,2],[3,2,2],[3,3,2],[3,3,1]],
+];
+
+/* ================================================================
+   SESSION STATE
+   ================================================================ */
+const session = {
+  participantId:  '',
+  sector:         '',    // sector dropdown value
+  role:           '',    // free-text role field
+  condition:      '',    // '2D' | '3D' | 'VR'
+  startTime:      null,
+  currentBlock:   'practice',
+  trialIndex:     0,
+  practiceTrials: [],
+  blockATrials:   [],
+  blockBTrials:   [],
+  allTrials:      [],
+  trialStartMs:   0,
+  currentTrial:   null,  // used by VR path
+  timerIv:        null,
+  restIv:         null,
+};
+
+/* ================================================================
+   SEEDED PRNG — Mulberry32
+   ================================================================ */
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+let rng = mulberry32(0);
+
+function randomQuat() {
+  const u1 = rng(), u2 = rng(), u3 = rng();
+  return new THREE.Quaternion(
+    Math.sqrt(1-u1) * Math.sin(2*Math.PI*u2),
+    Math.sqrt(1-u1) * Math.cos(2*Math.PI*u2),
+    Math.sqrt(u1)   * Math.sin(2*Math.PI*u3),
+    Math.sqrt(u1)   * Math.cos(2*Math.PI*u3)
+  ).normalize();
+}
+
+// ── Occlusion check ────────────────────────────────────────────────
+// Projects every cube centre through the desktop camera and rejects
+// orientations where any two projections are closer than OVERLAP_THRESHOLD.
+// This guarantees every cube is visually distinct in the static condition.
+const _camDir   = new THREE.Vector3(-3.5, -3.5, -8).normalize();
+const _camRight = new THREE.Vector3().crossVectors(_camDir, new THREE.Vector3(0, 1, 0)).normalize();
+const _camUp    = new THREE.Vector3().crossVectors(_camRight, _camDir).normalize();
+const OVERLAP_THRESHOLD = 0.55; // cubes are 1-unit spaced; < 0.55 means heavy overlap
+
+function isFullyVisible(positions, quat) {
+  let cx = 0, cy = 0, cz = 0;
+  for (const [x, y, z] of positions) { cx += x; cy += y; cz += z; }
+  cx /= positions.length; cy /= positions.length; cz /= positions.length;
+
+  const proj = positions.map(([x, y, z]) => {
+    const p = new THREE.Vector3(x - cx, y - cy, z - cz).applyQuaternion(quat);
+    return { u: p.dot(_camRight), v: p.dot(_camUp) };
+  });
+
+  for (let i = 0; i < proj.length; i++) {
+    for (let j = i + 1; j < proj.length; j++) {
+      const du = proj[i].u - proj[j].u;
+      const dv = proj[i].v - proj[j].v;
+      if (Math.sqrt(du * du + dv * dv) < OVERLAP_THRESHOLD) return false;
+    }
+  }
+  return true;
+}
+
+function visibleQuat(positions, baseTilts) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const q = baseTilts.clone().multiply(randomQuat());
+    if (isFullyVisible(positions, q)) return q;
+  }
+  return baseTilts.clone().multiply(randomQuat()); // fallback
+}
+
+function shuffle(arr) {
+  for (let i = arr.length-1; i > 0; i--) {
+    const j = Math.floor(rng()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* ================================================================
+   TRIAL GENERATION  (canonical VR version — resets arrays)
+   ================================================================ */
+// Fixed tilt applied to every target shape (30° up + 40° right)
+const TARGET_TILT = new THREE.Quaternion()
+  .setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 6)          // 30° tilt up
+  .premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI * 2 / 9)); // 40° tilt right
+
+const IDENTITY_QUAT = new THREE.Quaternion(); // no tilt for options
+
+function makeTrial(figIdx, isPractice, num, block) {
+  const slots = shuffle([0,1,2,3]);
+  const correctSlots = [slots[0], slots[1]];
+  const wrongSlots   = [slots[2], slots[3]];
+  const positions = BASE_FIGURES[figIdx];
+  const optQuats = [randomQuat(), randomQuat(), randomQuat(), randomQuat()];
+  return {
+    figIdx,
+    positions,
+    targetQuat:    visibleQuat(positions, TARGET_TILT),
+    options: optQuats.map((q, i) => ({
+      quat:     q,
+      mirrored: wrongSlots.includes(i),
+    })),
+    correctSlots,
+    selectedSlots: [],
+    responseMs:   null,
+    correct:      null,
+    isPractice,
+    trialNum:     num,
+    block,
+  };
+}
+
+function generateTrials() {
+  rng = mulberry32(CONFIG.SEED);
+  session.practiceTrials = [];
+  session.blockATrials   = [];
+  session.allTrials      = [];
+  const pool = shuffle([...Array.from({length: BASE_FIGURES.length}, (_,i) => i)]);
+  let p = 0;
+  const pick = () => { const v = pool[p % pool.length]; p++; return v; };
+  if (CONFIG.PRACTICE_ENABLED) {
+    for (let i = 0; i < CONFIG.PRACTICE_TRIALS; i++)
+      session.practiceTrials.push(makeTrial(pick(), true, i+1, 'practice'));
+  }
+  for (let i = 0; i < CONFIG.TRIALS_PER_BLOCK; i++)
+    session.blockATrials.push(makeTrial(pick(), false, i+1, 'A'));
+}
+
+/* ================================================================
+   SHARED UTILITIES
+   ================================================================ */
+function computeMedian(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b)=>a-b);
+  const m = Math.floor(s.length/2);
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+}
+
+function dl(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 150);
+}
+
+function ts() { return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19); }
+
+/* ================================================================
+   CLASS: FigureRenderer  (2D / 3D desktop rendering)
+   ================================================================ */
+class FigureRenderer {
+  constructor(container, interactive = true) {
+    this.container   = container;
+    this.interactive = interactive && CONFIG.ROTATION_ENABLED;
+    this.isDragging  = false;
+    this.prevVec     = null;
+    this.currentQuat = new THREE.Quaternion();
+    this.initQuat    = new THREE.Quaternion();
+    this.tweening    = false;
+    this.tweenFrom   = new THREE.Quaternion();
+    this.tweenTo     = new THREE.Quaternion();
+    this.tweenStart  = 0;
+    this.tweenMs     = 420;
+
+    this.scene    = new THREE.Scene();
+    this.camera   = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+    this.camera.position.set(3.5, 3.5, 8);
+    this.camera.lookAt(0, 0, 0);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x484848, 1);
+    container.insertBefore(this.renderer.domElement, container.firstChild);
+
+    this.figGroup = new THREE.Group();
+    this.scene.add(this.figGroup);
+
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 0.85);
+    key.position.set(5, 8, 6);
+    this.scene.add(key);
+
+    this._solidGeo   = new THREE.BoxGeometry(0.88, 0.88, 0.88);
+    this._solidMat   = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    this._outlineGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+    this._outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
+
+    if (this.interactive) this._initInteraction();
+
+    this._ro = new ResizeObserver(() => this._resize());
+    this._ro.observe(container);
+    this._resize();
+  }
+
+  setFigure(positions, mirrored, quat) {
+    while (this.figGroup.children.length)
+      this.figGroup.remove(this.figGroup.children[0]);
+
+    const pts = mirrored
+      ? positions.map(([x,y,z]) => [-x, y, z])
+      : positions.map(([x,y,z]) => [ x, y, z]);
+
+    let cx=0, cy=0, cz=0;
+    for (const [x,y,z] of pts) { cx+=x; cy+=y; cz+=z; }
+    cx/=pts.length; cy/=pts.length; cz/=pts.length;
+
+    for (const [x,y,z] of pts) {
+      const solid = new THREE.Mesh(this._solidGeo, this._solidMat);
+      solid.position.set(x-cx, y-cy, z-cz);
+      this.figGroup.add(solid);
+      const outline = new THREE.Mesh(this._outlineGeo, this._outlineMat);
+      outline.position.set(x-cx, y-cy, z-cz);
+      this.figGroup.add(outline);
+    }
+
+    this.figGroup.scale.setScalar(0.85);   // desktop figures rendered 15% smaller
+    this.initQuat.copy(quat || new THREE.Quaternion());
+    this.currentQuat.copy(this.initQuat);
+    this.figGroup.quaternion.copy(this.currentQuat);
+    this.tweening = false;
+  }
+
+  resetRotation() {
+    this.tweenFrom.copy(this.currentQuat);
+    this.tweenTo.copy(this.initQuat);
+    this.tweenStart = performance.now();
+    this.tweening   = true;
+  }
+
+  render(ts) {
+    if (this.tweening) {
+      const t = Math.min((ts - this.tweenStart) / this.tweenMs, 1);
+      const e = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+      this.currentQuat.copy(this.tweenFrom).slerp(this.tweenTo, e);
+      this.figGroup.quaternion.copy(this.currentQuat);
+      if (t >= 1) this.tweening = false;
+    }
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  _initInteraction() {
+    const el = this.renderer.domElement;
+    el.style.cursor = 'grab';
+
+    el.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('reset-btn')) return;
+      e.preventDefault();
+      this.isDragging = true;
+      this.prevVec = this._trackballVec(e.clientX, e.clientY);
+      el.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!this.isDragging) return;
+      this._applyDelta(this._trackballVec(e.clientX, e.clientY));
+    });
+
+    const stopDrag = () => {
+      if (!this.isDragging) return;
+      this.isDragging = false;
+      el.style.cursor = 'grab';
+    };
+    window.addEventListener('mouseup', stopDrag);
+
+    el.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        this.isDragging = true;
+        this.prevVec = this._trackballVec(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    el.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (this.isDragging && e.touches.length === 1)
+        this._applyDelta(this._trackballVec(e.touches[0].clientX, e.touches[0].clientY));
+    }, { passive: false });
+
+    el.addEventListener('touchend', () => { this.isDragging = false; });
+  }
+
+  _applyDelta(currVec) {
+    if (!this.prevVec) { this.prevVec = currVec; return; }
+    const axis  = new THREE.Vector3().crossVectors(this.prevVec, currVec);
+    const angle = this.prevVec.angleTo(currVec);
+    if (axis.length() > 1e-5 && angle > 1e-4) {
+      axis.normalize();
+      const dq = new THREE.Quaternion().setFromAxisAngle(axis, angle * 2.2);
+      this.currentQuat.premultiply(dq);
+      this.figGroup.quaternion.copy(this.currentQuat);
+    }
+    this.prevVec = currVec;
+  }
+
+  _trackballVec(sx, sy) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const x =  (2*(sx - r.left) / r.width)  - 1;
+    const y = -(2*(sy - r.top)  / r.height) + 1;
+    const d = x*x + y*y;
+    if (d <= 1) return new THREE.Vector3(x, y, Math.sqrt(1-d)).normalize();
+    const l = Math.sqrt(d);
+    return new THREE.Vector3(x/l, y/l, 0).normalize();
+  }
+
+  _resize() {
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (!w || !h) return;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  dispose() {
+    this._ro.disconnect();
+    this._solidGeo.dispose();   this._solidMat.dispose();
+    this._outlineGeo.dispose(); this._outlineMat.dispose();
+    this.renderer.dispose();
+    if (this.renderer.domElement.parentNode)
+      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+  }
+}
+
+/* ================================================================
+   DOM RENDERING INFRASTRUCTURE
+   ================================================================ */
+let figureRenderers = [];
+let rafId = null;
+let trial = null;  // current DOM trial
+
+function initRenderers() {
+  figureRenderers.forEach(r => r.dispose());
+  figureRenderers = [
+    new FigureRenderer(document.getElementById('tc'),    true),
+    new FigureRenderer(document.getElementById('oc-0'), false),
+    new FigureRenderer(document.getElementById('oc-1'), false),
+    new FigureRenderer(document.getElementById('oc-2'), false),
+    new FigureRenderer(document.getElementById('oc-3'), false),
+  ];
+}
+
+function startRAF() {
+  if (rafId) return;
+  const loop = (ts) => {
+    figureRenderers.forEach(r => r.render(ts));
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
+}
+
+function stopRAF() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+/* ================================================================
+   CLASS VRFigureGroup
+   ================================================================ */
+class VRFigureGroup {
+  constructor(scale) {
+    this._scale = scale;
+    this._group = new THREE.Group();
+    this._solidGeo   = new THREE.BoxGeometry(0.88*scale, 0.88*scale, 0.88*scale);
+    this._solidMat   = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    this._outlineGeo = new THREE.BoxGeometry(scale, scale, scale);
+    this._outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
+    this._solidMeshes = [];
+  }
+
+  build(positions, mirrored, quaternion) {
+    while(this._group.children.length) this._group.remove(this._group.children[0]);
+    this._solidMeshes = [];
+
+    const pts = mirrored
+      ? positions.map(([x,y,z]) => [-x, y, z])
+      : positions.map(([x,y,z]) => [ x, y, z]);
+
+    let cx=0, cy=0, cz=0;
+    for(const [x,y,z] of pts) { cx+=x; cy+=y; cz+=z; }
+    cx/=pts.length; cy/=pts.length; cz/=pts.length;
+
+    for(const [x,y,z] of pts) {
+      const solid = new THREE.Mesh(this._solidGeo, this._solidMat);
+      solid.position.set((x-cx)*this._scale, (y-cy)*this._scale, (z-cz)*this._scale);
+      this._group.add(solid);
+      this._solidMeshes.push(solid);
+      const outline = new THREE.Mesh(this._outlineGeo, this._outlineMat);
+      outline.position.copy(solid.position);
+      this._group.add(outline);
+    }
+
+    if(quaternion) this._group.quaternion.copy(quaternion);
+  }
+
+  get group()    { return this._group; }
+  getMeshes()    { return this._solidMeshes; }
+  setQuaternion(q) { this._group.quaternion.copy(q); }
+  getCurrentQuat() { return this._group.quaternion.clone(); }
+
+  dispose() {
+    this._solidGeo.dispose();
+    this._outlineGeo.dispose();
+    this._solidMat.dispose();
+    this._outlineMat.dispose();
+  }
+}
+
+/* ================================================================
+   HELPER: flushOptionRenders
+   ================================================================ */
+function flushOptionRenders() {
+  const pendingCells = optionCells ? optionCells.filter(c => c._pendingRender) : [];
+  if(pendingCells.length === 0) return;
+
+  const SIZE = 512;
+  const offRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  offRenderer.setSize(SIZE, SIZE);
+
+  const offCam = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
+  offCam.position.set(0.75, 0.75, 1.8);
+
+  for(const cell of pendingCells) {
+    const { positions, mirrored, quaternion } = cell._pendingRender;
+    cell._pendingRender = null;
+
+    if(cell._figRT)  { cell._figRT.dispose();  cell._figRT  = null; }
+    if(cell._figTex) { cell._figTex.dispose(); cell._figTex = null; }
+
+    const offScene = new THREE.Scene();
+    offScene.background = new THREE.Color(0x333333);
+    offScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+    dl.position.set(5, 10, 7);
+    offScene.add(dl);
+
+    const fig = new VRFigureGroup(0.10);
+    fig.build(positions, mirrored, quaternion);
+    offScene.add(fig.group);
+
+    const box = new THREE.Box3().setFromObject(fig.group);
+    const figCenter = box.getCenter(new THREE.Vector3());
+    offCam.lookAt(figCenter);
+
+    offRenderer.render(offScene, offCam);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE; canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(offRenderer.domElement, 0, 0);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(8, 8, 56, 72);
+    ctx.font = 'bold 64px Arial, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 4;
+    ctx.fillText(cell._label, 16, 68);
+    ctx.shadowBlur = 0;
+
+    const tex = new THREE.CanvasTexture(canvas);
+    cell._figTex = tex;
+    const mat = cell._backdrop.material;
+    mat.map = tex;
+    mat.color.setHex(0xffffff);
+    mat.needsUpdate = true;
+
+    offScene.traverse(obj => { if(obj.isMesh) obj.geometry.dispose(); });
+    fig.dispose();
+  }
+  offRenderer.dispose();
+}
+
+/* ================================================================
+   CLASS UIPanel
+   ================================================================ */
+class UIPanel {
+  constructor(widthM, heightM, resX=512, resY=256) {
+    this._canvas = document.createElement('canvas');
+    this._canvas.width = resX;
+    this._canvas.height = resY;
+    this._ctx = this._canvas.getContext('2d');
+    this._texture = new THREE.CanvasTexture(this._canvas);
+    this._mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(widthM, heightM),
+      new THREE.MeshBasicMaterial({ map: this._texture, transparent: true, side: THREE.DoubleSide })
+    );
+  }
+
+  update(lines, opts={}) {
+    const ctx = this._ctx;
+    const w = this._canvas.width, h = this._canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = opts.bg || 'rgba(0,0,0,0.75)';
+    const r = 20;
+    ctx.beginPath();
+    ctx.moveTo(r, 0); ctx.lineTo(w-r, 0); ctx.quadraticCurveTo(w, 0, w, r);
+    ctx.lineTo(w, h-r); ctx.quadraticCurveTo(w, h, w-r, h);
+    ctx.lineTo(r, h); ctx.quadraticCurveTo(0, h, 0, h-r);
+    ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    const fontSize = opts.fontSize || 32;
+    ctx.font = `${opts.bold ? 'bold ' : ''}${fontSize}px -apple-system, Arial, sans-serif`;
+    ctx.fillStyle = opts.color || '#ffffff';
+    ctx.textAlign = opts.align || 'center';
+    ctx.textBaseline = 'middle';
+    const lineH = fontSize * 1.4;
+    const totalH = lines.length * lineH;
+    const startY = (h - totalH) / 2 + lineH / 2;
+    lines.forEach((line, i) => {
+      ctx.fillText(line, opts.align === 'left' ? 20 : w/2, startY + i * lineH);
+    });
+    this._texture.needsUpdate = true;
+  }
+
+  get mesh() { return this._mesh; }
+}
+
+/* ================================================================
+   CLASS Button3D
+   ================================================================ */
+class Button3D {
+  constructor(label, widthM=0.42, heightM=0.14) {
+    this._label   = label;
+    this._enabled = true;
+    this._hovered = false;
+    this._cb      = null;
+
+    this._canvas = document.createElement('canvas');
+    this._canvas.width = 512; this._canvas.height = 128;
+    this._ctx     = this._canvas.getContext('2d');
+    this._texture = new THREE.CanvasTexture(this._canvas);
+    this._mesh    = new THREE.Mesh(
+      new THREE.PlaneGeometry(widthM, heightM),
+      new THREE.MeshBasicMaterial({ map: this._texture, transparent: true, side: THREE.DoubleSide })
+    );
+    this._group = new THREE.Group();
+    this._group.add(this._mesh);
+    this._redraw();
+  }
+
+  _redraw() {
+    const ctx = this._ctx;
+    const w = this._canvas.width, h = this._canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    const bg = !this._enabled ? 'rgba(60,60,60,0.8)' : this._hovered ? 'rgba(255,255,255,0.9)' : 'rgba(40,40,40,0.9)';
+    const fg = !this._enabled ? '#888' : this._hovered ? '#000' : '#fff';
+    const border = this._hovered ? '#ffffff' : '#666666';
+    ctx.fillStyle = bg;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 6;
+    const r = 16;
+    ctx.beginPath();
+    ctx.moveTo(r,0); ctx.lineTo(w-r,0); ctx.quadraticCurveTo(w,0,w,r);
+    ctx.lineTo(w,h-r); ctx.quadraticCurveTo(w,h,w-r,h);
+    ctx.lineTo(r,h); ctx.quadraticCurveTo(0,h,0,h-r);
+    ctx.lineTo(0,r); ctx.quadraticCurveTo(0,0,r,0);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.font = 'bold 40px Arial, sans-serif';
+    ctx.fillStyle = fg;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this._label, w/2, h/2);
+    this._texture.needsUpdate = true;
+  }
+
+  setLabel(text) { this._label = text; this._redraw(); }
+  setEnabled(v)  { this._enabled = v; this._redraw(); }
+  setHovered(v)  { if(this._hovered !== v) { this._hovered = v; this._redraw(); } }
+  onClick(cb)    { this._cb = cb; }
+  trigger()      { if(this._enabled && this._cb) this._cb(); }
+  get group()    { return this._group; }
+  get mesh()     { return this._mesh; }
+}
+
+/* ================================================================
+   CLASS OptionCell
+   ================================================================ */
+class OptionCell {
+  constructor(label, scale) {
+    this._label    = label;
+    this._selected = false;
+    this._hovered  = false;
+    this._figRT    = null;
+    this._figTex   = null;
+    this._group    = new THREE.Group();
+
+    this._backdrop = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.26, 1.26),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.0, side: THREE.DoubleSide })
+    );
+    this._group.add(this._backdrop);
+
+    this._borderMat = new THREE.MeshBasicMaterial({ color: 0x444444 });
+    const bw=1.26, bh=1.26, bt=0.01, bd=0.005;
+    const borders = [
+      { pos:[0, bh/2, 0.002],  size:[bw+bt, bt, bd] },
+      { pos:[0,-bh/2, 0.002],  size:[bw+bt, bt, bd] },
+      { pos:[-bw/2, 0, 0.002], size:[bt, bh, bd] },
+      { pos:[ bw/2, 0, 0.002], size:[bt, bh, bd] },
+    ];
+    this._borderMeshes = borders.map(b => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(...b.size), this._borderMat);
+      m.position.set(...b.pos);
+      this._group.add(m);
+      return m;
+    });
+
+    this._labelPanel = new UIPanel(0.38, 0.08, 256, 64);
+    this._labelPanel.update([label], { fontSize: 28, bold: true });
+    this._labelPanel.mesh.position.set(0, -0.72, 0);
+    this._group.add(this._labelPanel.mesh);
+  }
+
+  build() {
+    // Figure rendering is now handled by live 3D VRFigureGroup instances (optionFigureGroups).
+    // Backdrop is transparent — nothing to reset visually.
+  }
+
+  dispose() {}
+
+  setHovered(v) {
+    if(this._hovered === v) return;
+    this._hovered = v;
+    this._updateBorderColor();
+  }
+
+  setSelected(v) {
+    this._selected = v;
+    this._updateBorderColor();
+  }
+
+  setFeedback(state) {
+    if(state === 'correct') this._borderMat.color.setHex(0x4caf50);
+    else if(state === 'wrong') this._borderMat.color.setHex(0xef5350);
+    else this._updateBorderColor();
+  }
+
+  clearStates() {
+    this._selected = false;
+    this._hovered  = false;
+    this._updateBorderColor();
+  }
+
+  _updateBorderColor() {
+    const col = this._selected ? 0xffffff : this._hovered ? 0x888888 : 0x444444;
+    this._borderMat.color.setHex(col);
+  }
+
+  get group()    { return this._group; }
+  get mesh()     { return this._backdrop; }
+  get selected() { return this._selected; }
+}
+
+/* ================================================================
+   VR SCENE STATE  (all declared undefined; populated by initVR/buildScene)
+   ================================================================ */
+let vrScene, vrCamera, vrRenderer;
+let targetFigureGroup, optionCells, optionFigureGroups, optionsBoard;
+let hudPanel, selectionPanel, submitButton;
+let tutorialPanel, tutorialNextBtn;
+let debriefPanel, dlJsonBtn, dlCsvBtn;
+let fixationPanel;
+let ctrl0, ctrl1, hand0, hand1;
+let interactables = [];
+
+// Pre-computed rotation that aligns the 2D camera view direction (3.5, 3.5, 8) with the
+// VR viewing direction. Options board faces almost straight ahead (only −10° Y tilt),
+// so the from-figure-to-user direction is approximately (0, 0, +1).
+const align2DQuat = new THREE.Quaternion().setFromUnitVectors(
+  new THREE.Vector3(3.5, 3.5, 8).normalize(),
+  new THREE.Vector3(0, 0, 1)
+);
+
+/* ================================================================
+   VR SCENE BUILDER
+   ================================================================ */
+function buildScene() {
+  // ── Target figure ─────────────────────────────────────────────────
+  // Straight ahead of the user at (0, 1.55, −1.10).
+  // Tutorial panel floats above it; options board is side-by-side to the right (−10° tilt).
+  targetFigureGroup = new VRFigureGroup(CONFIG.VR_FIGURE_SCALE);
+  targetFigureGroup.group.position.set(0, 1.55, -1.10);
+  vrScene.add(targetFigureGroup.group);
+
+  // ── Options board ─────────────────────────────────────────────────
+  // To the right of the target, almost straight ahead — only −10° Y tilt so cells
+  // face the user who looks forward. Cells spread on the board's local XY plane.
+  optionsBoard = new THREE.Group();
+  optionsBoard.position.set(0.80, 1.55, -1.10);
+  optionsBoard.rotation.y = -Math.PI / 18;
+  vrScene.add(optionsBoard);
+
+  const optLabels  = ['A','B','C','D'];
+  const optOffsets = [[-0.30, 0.28, 0],[0.30, 0.28, 0],[-0.30,-0.28, 0],[0.30,-0.28, 0]];
+  optionCells = optLabels.map((lbl, i) => {
+    const cell = new OptionCell(lbl, CONFIG.VR_OPTION_SCALE);
+    cell.group.position.set(...optOffsets[i]);
+    cell.group.scale.setScalar(0.22);
+    optionsBoard.add(cell.group);
+    return cell;
+  });
+
+  // Live 3D option figures — one VRFigureGroup per option, parented directly to optionsBoard.
+  // Positioned at the same x/y as their OptionCell, slightly in front (z=0.05 m).
+  // Scale chosen so the ~4-unit figure spans ~14 cm inside the 27.7 cm cell backdrop.
+  const OPT_FIG_SCALE = 0.035;
+  optionFigureGroups = optOffsets.map(([ox, oy]) => {
+    const fg = new VRFigureGroup(OPT_FIG_SCALE);
+    fg.group.position.set(ox, oy, 0.05);
+    optionsBoard.add(fg.group);
+    return fg;
+  });
+
+  // ── Submit button — centred in the gap between the 2×2 option rows ─
+  // Parented to optionsBoard so it inherits position and rotation.
+  // Gap between rows is ~28 cm; button height is 10 cm — fits cleanly.
+  submitButton = new Button3D('SUBMIT', 0.28, 0.10);
+  submitButton.group.position.set(0, 0, 0.005); // dead-centre of grid, slightly in front
+  submitButton.onClick(vr_submitTrial);
+  submitButton.setEnabled(false);
+  optionsBoard.add(submitButton.group);          // child of optionsBoard — no separate rotation needed
+
+  // ── HUD (block / trial counter / timer) — above the target; shared position with NEXT btn ──
+  // HUD shows during trials; tutorial NEXT button occupies the same slot during tutorial.
+  hudPanel = new UIPanel(0.58, 0.13, 512, 96);
+  hudPanel.mesh.position.set(0, 1.73, -1.10);
+  vrScene.add(hudPanel.mesh);
+
+  // ── Selection count — below the target ───────────────────────────
+  selectionPanel = new UIPanel(0.58, 0.09, 512, 72);
+  selectionPanel.mesh.position.set(0, 1.35, -1.10);
+  vrScene.add(selectionPanel.mesh);
+
+  // ── Tutorial panel — directly above the target shape ────────────
+  // Width 0.80 m × height 0.55 m; sits above the HUD band, no rotation needed.
+  tutorialPanel = new UIPanel(0.80, 0.55, 768, 528);
+  tutorialPanel.mesh.position.set(-0.15, 2.10, -1.10);
+  vrScene.add(tutorialPanel.mesh);
+
+  // ── Tutorial NEXT button — aligned with tutorial panel, 2 cm below its bottom edge ──
+  // Panel bottom: 2.10 − 0.275 = 1.825 m  →  button top: 1.805 m  →  center: 1.745 m
+  tutorialNextBtn = new Button3D('NEXT', 0.36, 0.12);
+  tutorialNextBtn.group.position.set(-0.15, 1.745, -1.10);
+  tutorialNextBtn.onClick(() => tutorialNext());
+  vrScene.add(tutorialNextBtn.group);
+
+  // ── Debrief panel ─────────────────────────────────────────────────
+  debriefPanel = new UIPanel(1.10, 0.76, 768, 512);
+  debriefPanel.mesh.position.set(0, 1.58, -1.35);
+  debriefPanel.mesh.visible = false;
+  vrScene.add(debriefPanel.mesh);
+
+  dlJsonBtn = new Button3D('Download JSON', 0.48, 0.12);
+  dlJsonBtn.group.position.set(-0.27, 0.98, -1.35);
+  dlJsonBtn.group.visible = false;
+  dlJsonBtn.onClick(exportJSON);
+  vrScene.add(dlJsonBtn.group);
+
+  dlCsvBtn = new Button3D('Download CSV', 0.48, 0.12);
+  dlCsvBtn.group.position.set(0.27, 0.98, -1.35);
+  dlCsvBtn.group.visible = false;
+  dlCsvBtn.onClick(exportCSV);
+  vrScene.add(dlCsvBtn.group);
+
+  // ── Fixation cross ────────────────────────────────────────────────
+  fixationPanel = new UIPanel(0.38, 0.38, 256, 256);
+  fixationPanel.update(['+'], { fontSize: 120, bold: true, bg: 'rgba(58,58,58,0.95)' });
+  fixationPanel.mesh.position.set(0, 1.55, -1.10);
+  fixationPanel.mesh.visible = false;
+  vrScene.add(fixationPanel.mesh);
+
+  vr_setTrialElementsVisible(false);
+  tutorialPanel.mesh.visible    = false;
+  tutorialNextBtn.group.visible = false;
+}
+
+/* ================================================================
+   CONTROLLER SETUP
+   ================================================================ */
+function setupControllers() {
+  [0, 1].forEach(i => {
+    const ctrl = vrRenderer.xr.getController(i);
+
+    const ray = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-3)
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true })
+    );
+    ctrl.add(ray);
+
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.007, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+    dot.position.set(0, 0, -3);
+    ctrl.add(dot);
+
+    ctrl.addEventListener('selectstart', () => onSelectStart(ctrl));
+    ctrl.addEventListener('selectend',   () => onSelectEnd(ctrl));
+    ctrl.addEventListener('squeezestart', () => {});
+    ctrl.addEventListener('squeezeend',   () => {});
+
+    vrScene.add(ctrl);
+    if(i === 0) ctrl0 = ctrl; else ctrl1 = ctrl;
+  });
+
+  [0, 1].forEach(i => {
+    const hand = vrRenderer.xr.getHand(i);
+    vrScene.add(hand);
+    if(i === 0) hand0 = hand; else hand1 = hand;
+  });
+}
+
+/* ================================================================
+   VR INTERACTION
+   ================================================================ */
+const raycaster  = new THREE.Raycaster();
+const tempMatrix = new THREE.Matrix4();
+
+let isGrabbing      = false;
+let grabController  = null;
+let grabIsHand      = false;   // true when grab was initiated by hand tracking
+let grabHandIndexTip = null;   // XRJointSpace reference for hand-grab position
+const prevGrabCtrlPos = new THREE.Vector3(); // controller/hand position last frame
+
+function setFigureGrabColor(hex) {
+  if(!targetFigureGroup) return;
+  for(const m of targetFigureGroup.getMeshes()) m.material.color.setHex(hex);
+}
+
+let hoveredObject = null;
+const hoveredMap  = new WeakMap();
+
+function registerInteractable(mesh, handler) { hoveredMap.set(mesh, handler); }
+
+function registerAllInteractables() {
+  interactables = [];
+  optionCells.forEach(cell => {
+    interactables.push(cell.mesh);
+    registerInteractable(cell.mesh, cell);
+  });
+  interactables.push(submitButton.mesh);
+  registerInteractable(submitButton.mesh, submitButton);
+  interactables.push(tutorialNextBtn.mesh);
+  registerInteractable(tutorialNextBtn.mesh, tutorialNextBtn);
+  interactables.push(dlJsonBtn.mesh);
+  registerInteractable(dlJsonBtn.mesh, dlJsonBtn);
+  interactables.push(dlCsvBtn.mesh);
+  registerInteractable(dlCsvBtn.mesh, dlCsvBtn);
+}
+
+function updateRaycast(ctrl) {
+  if(!ctrl || !ctrl.matrixWorld) return null;
+  ctrl.updateMatrixWorld(true);
+  tempMatrix.identity().extractRotation(ctrl.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+  const hits = raycaster.intersectObjects(interactables);
+  return hits.length > 0 ? hits[0].object : null;
+}
+
+function updateHover(hitMesh) {
+  if(hoveredObject && hoveredObject !== hitMesh) {
+    const h = hoveredMap.get(hoveredObject);
+    if(h) h.setHovered(false);
+    hoveredObject = null;
+  }
+  if(hitMesh) {
+    const h = hoveredMap.get(hitMesh);
+    if(h) h.setHovered(true);
+    hoveredObject = hitMesh;
+  }
+}
+
+function onSelectStart(ctrl) {
+  ctrl.updateMatrixWorld(true);
+  tempMatrix.identity().extractRotation(ctrl.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+  if(session.condition !== 'VR-NR' && targetFigureGroup && targetFigureGroup.group.visible) {
+    const figMeshes  = targetFigureGroup.getMeshes();
+    const figHits    = figMeshes.length > 0 ? raycaster.intersectObjects(figMeshes, false) : [];
+    const figWorldPos = new THREE.Vector3();
+    targetFigureGroup.group.getWorldPosition(figWorldPos);
+    const nearEnough = raycaster.ray.distanceToPoint(figWorldPos) < CONFIG.VR_GRAB_RADIUS;
+
+    if(figHits.length > 0 || nearEnough) {
+      isGrabbing = true;
+      grabController = ctrl;
+      grabIsHand = false;
+      grabHandIndexTip = null;
+      ctrl.getWorldPosition(prevGrabCtrlPos);
+      setFigureGrabColor(0xaaddff);
+      return;
+    }
+  }
+
+  const hit = updateRaycast(ctrl);
+  if(!hit) return;
+  const handler = hoveredMap.get(hit);
+  if(!handler) return;
+  if(handler instanceof OptionCell)   toggleVRSelection(optionCells.indexOf(handler));
+  else if(handler instanceof Button3D) handler.trigger();
+}
+
+function onSelectEnd(ctrl) {
+  if(grabController === ctrl) {
+    isGrabbing = false;
+    grabController = null;
+    grabIsHand = false;
+    grabHandIndexTip = null;
+    setFigureGrabColor(0xffffff);
+  }
+}
+
+// Grab rotation speed: radians of figure rotation per metre of hand movement.
+// Matches the feel of the 3D mouse trackball (push hand right = figure turns right).
+const GRAB_SPEED = 5.0;
+
+function updateGrab() {
+  if(!isGrabbing || !grabController) return;
+  if(session.condition === 'VR-NR') return;
+
+  // Get current grab point position in world space
+  const currentPos = new THREE.Vector3();
+  if(grabIsHand && grabHandIndexTip) {
+    grabHandIndexTip.getWorldPosition(currentPos);
+  } else {
+    grabController.getWorldPosition(currentPos);
+  }
+
+  // Position delta since last frame
+  const delta = currentPos.clone().sub(prevGrabCtrlPos);
+  if(delta.lengthSq() < 1e-9) return;
+
+  // Map movement to rotation — same axes and directions as the 3D mouse trackball:
+  //   hand right (+x)  →  figure rotates right (Y+)
+  //   hand up   (+y)   →  figure tips toward viewer (X-)
+  const qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),  delta.x * GRAB_SPEED);
+  const qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), -delta.y * GRAB_SPEED);
+  targetFigureGroup.group.quaternion.premultiply(qY).premultiply(qX);
+
+  prevGrabCtrlPos.copy(currentPos); // advance reference point
+}
+
+const JOYSTICK_SPEED    = 0.03;
+const JOYSTICK_DEADZONE = 0.15;
+
+function updateJoystickRotation() {
+  if(isGrabbing) return;
+  if(session.condition === 'VR-NR') return;
+  if(!targetFigureGroup || !targetFigureGroup.group.visible) return;
+  const xrSession = vrRenderer.xr.getSession();
+  if(!xrSession) return;
+
+  // RIGHT joystick horizontal → Y axis rotation (yaw)
+  // RIGHT joystick vertical   → X axis rotation (pitch)
+  // LEFT  joystick horizontal → Z axis rotation (roll)
+  let leftH = 0, rightH = 0, rightV = 0;
+
+  for(const src of xrSession.inputSources) {
+    const gp = src.gamepad;
+    if(!gp || !gp.axes || gp.axes.length < 4) continue;
+    if(src.handedness === 'left') {
+      const h = gp.axes[2];
+      if(Math.abs(h) > JOYSTICK_DEADZONE) leftH += h;
+    } else {
+      const h = gp.axes[2];
+      const v = gp.axes[3];
+      if(Math.abs(h) > JOYSTICK_DEADZONE) rightH += h;
+      if(Math.abs(v) > JOYSTICK_DEADZONE) rightV += v;
+    }
+  }
+
+  // Right joystick horizontal → Y rotation (yaw)
+  if(rightH !== 0) {
+    const qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), rightH * JOYSTICK_SPEED);
+    targetFigureGroup.group.quaternion.premultiply(qY);
+  }
+  // Right joystick vertical → X rotation (pitch)
+  if(rightV !== 0) {
+    const qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), rightV * JOYSTICK_SPEED);
+    targetFigureGroup.group.quaternion.premultiply(qX);
+  }
+  // Left joystick horizontal → Z rotation (roll)
+  if(leftH !== 0) {
+    const qZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), leftH * JOYSTICK_SPEED);
+    targetFigureGroup.group.quaternion.premultiply(qZ);
+  }
+}
+
+const handPinching = [false, false];
+
+function updateHandTracking(hand, idx) {
+  if(!hand || !hand.joints) return;
+  const indexTip = hand.joints['index-finger-tip'];
+  const thumbTip  = hand.joints['thumb-tip'];
+  const wrist     = hand.joints['wrist'];
+  if(!indexTip || !thumbTip || !wrist) return;
+
+  const pinchDist  = indexTip.position.distanceTo(thumbTip.position);
+  const isPinching = pinchDist < 0.025;
+  const wasPinching = handPinching[idx];
+
+  if(!wasPinching && isPinching) {
+    raycaster.ray.origin.copy(indexTip.position);
+    raycaster.ray.direction.subVectors(indexTip.position, wrist.position).normalize();
+
+    if(session.condition !== 'VR-NR' && targetFigureGroup && targetFigureGroup.group.visible) {
+      const figMeshes  = targetFigureGroup.getMeshes();
+      const figHits    = figMeshes.length > 0 ? raycaster.intersectObjects(figMeshes, false) : [];
+      const figWorldPos = new THREE.Vector3();
+      targetFigureGroup.group.getWorldPosition(figWorldPos);
+      const nearEnough = raycaster.ray.distanceToPoint(figWorldPos) < CONFIG.VR_GRAB_RADIUS;
+
+      if(figHits.length > 0 || nearEnough) {
+        isGrabbing = true;
+        grabController = hand;
+        grabIsHand = true;
+        grabHandIndexTip = indexTip;
+        indexTip.getWorldPosition(prevGrabCtrlPos);
+        setFigureGrabColor(0xaaddff);
+        handPinching[idx] = true;
+        return;
+      }
+    }
+
+    const hits = raycaster.intersectObjects(interactables);
+    if(hits.length > 0) {
+      const handler = hoveredMap.get(hits[0].object);
+      if(handler instanceof OptionCell)   toggleVRSelection(optionCells.indexOf(handler));
+      else if(handler instanceof Button3D) handler.trigger();
+    }
+  }
+
+  if(wasPinching && !isPinching && grabController === hand) {
+    isGrabbing = false;
+    grabController = null;
+    grabIsHand = false;
+    grabHandIndexTip = null;
+    setFigureGrabColor(0xffffff);
+  }
+
+  handPinching[idx] = isPinching;
+}
+
+/* ================================================================
+   TUTORIAL
+   ================================================================ */
+let tutorialStep       = 0;
+let tutorialActive     = false;
+let tutorialAutoRotate = false;
+
+const TUTORIAL_STEPS = [
+  { lines: ['WELCOME', 'Shape Rotation Task', '', 'In each trial:', 'Study the target shape,', 'find the 2 matching options.', '', 'Press NEXT to continue'], action: 'show_welcome' },
+  { lines: ['TARGET OBJECT', '', 'This shape is your target.', 'Study it from all angles.', '', 'Press NEXT to continue'], action: 'show_target' },
+  { lines: ['ROTATE THE TARGET', '', 'Grip near the shape &', 'move your hand to rotate', '(like dragging with a mouse).', '', 'LEFT stick  → Y axis (yaw)', 'RIGHT stick → X axis (pitch)', '', 'Press NEXT to continue'], action: 'show_grab_hint' },
+  { lines: ['ANSWER OPTIONS', '', 'These 4 shapes are', 'the answer options.', '', '2 of them match the target', '(same shape, rotated).', '', 'Press NEXT to continue'], action: 'show_options' },
+  { lines: ['HOW TO SELECT', '', 'Point at an option', 'and pull the TRIGGER', '(or pinch index+thumb)', 'to select it.', '', 'Select exactly 2. Press NEXT'], action: 'highlight_options' },
+  { lines: ['HOW TO SUBMIT', '', 'When 2 options are selected,', 'point at the SUBMIT button', 'and pull the TRIGGER.', '', 'Press NEXT to continue'], action: 'highlight_submit' },
+  { lines: ['TEST BLOCK', '', 'You will now do 2 test', 'trials WITH feedback.', '', 'Correct = green border', 'Wrong   = red border', '', 'Press START to begin!'], action: 'show_start', nextLabel: 'START' },
+];
+
+function showTutorial() {
+  tutorialActive = true;
+  tutorialStep   = 0;
+
+  vr_setTrialElementsVisible(false);
+  tutorialPanel.mesh.visible    = true;
+  tutorialNextBtn.group.visible = true;
+
+  generateTrials();
+  const tutFig = session.practiceTrials[0];
+  targetFigureGroup.build(tutFig.positions, false, tutFig.targetQuat);
+  for(let i=0; i<4; i++) {
+    optionCells[i].build();
+    optionCells[i].clearStates();
+    const q = new THREE.Quaternion().multiplyQuaternions(align2DQuat, tutFig.options[i].quat);
+    optionFigureGroups[i].build(tutFig.positions, tutFig.options[i].mirrored, q);
+  }
+  // Options board stays at its trial position — no repositioning needed.
+  optionsBoard.position.set(0.80, 1.55, -1.10);
+  optionsBoard.rotation.y = -Math.PI / 18;
+  optionsBoard.visible = true;
+  submitButton.group.visible = false;
+  applyTutorialStep(0);
+}
+
+function applyTutorialStep(step) {
+  let s = TUTORIAL_STEPS[step];
+  // For VR-NR, replace the "rotate target" step with a "fixed target" message
+  if(step === 2 && session.condition === 'VR-NR') {
+    s = { ...s, lines: ['TARGET OBJECT', '', 'This shape is your target.', 'Study it carefully —', 'it cannot be rotated.', '', 'Press NEXT to continue'] };
+  }
+  tutorialPanel.update(s.lines, { fontSize: 28, bold: false, bg: 'rgba(10,25,80,1.0)' });
+  tutorialNextBtn.setLabel(s.nextLabel || 'NEXT');
+
+  // Target is always visible during the tutorial so the user sees it from the start.
+  targetFigureGroup.group.visible = true;
+  targetFigureGroup.group.position.set(0, 1.55, -1.10);
+  tutorialAutoRotate = (step === 1 && session.condition !== 'VR-NR');
+  // Submit button only highlighted on the final step.
+  submitButton.group.visible = (step === 5);
+  if(step === 5) submitButton.setHovered(true);
+  else           submitButton.setHovered(false);
+}
+
+function tutorialNext() {
+  tutorialStep++;
+  if(tutorialStep >= TUTORIAL_STEPS.length) {
+    tutorialActive = false;
+    tutorialPanel.mesh.visible    = false;
+    tutorialNextBtn.group.visible = false;
+    vr_beginPractice();
+    return;
+  }
+  applyTutorialStep(tutorialStep);
+}
+
+/* ================================================================
+   VR TRIAL STATE MACHINE  (all functions prefixed vr_)
+   ================================================================ */
+let vrSelectedIndices = [];
+let vrTimerSeconds    = 0;
+let vrTimerIv         = null;
+
+function vr_currentTrials() {
+  return session.currentBlock === 'practice' ? session.practiceTrials : session.blockATrials;
+}
+
+function vr_setTrialElementsVisible(v) {
+  if(targetFigureGroup) targetFigureGroup.group.visible = v;
+  if(optionsBoard)      optionsBoard.visible = v;
+  if(hudPanel)          hudPanel.mesh.visible = v;
+  if(selectionPanel)    selectionPanel.mesh.visible = v;
+  if(submitButton)      submitButton.group.visible = v;
+}
+
+function vr_beginPractice() {
+  session.currentBlock = 'practice';
+  session.trialIndex   = 0;
+  targetFigureGroup.group.position.set(0, 1.55, -1.10);
+  vr_setTrialElementsVisible(true);
+  vr_loadTrial(session.practiceTrials[0]);
+  hudPanel.update(['Test Block', `Trial 1 / ${session.practiceTrials.length}`], { fontSize: 28 });
+}
+
+function vr_beginBlock(block) {
+  session.currentBlock = block;
+  session.trialIndex   = 0;
+  targetFigureGroup.group.position.set(0, 1.55, -1.10);
+  vr_setTrialElementsVisible(true);
+  vr_loadTrial(session.blockATrials[0]);
+  vr_startTimer(CONFIG.TIME_LIMIT_SECONDS);
+}
+
+function vr_loadTrial(t) {
+  session.currentTrial  = t;
+  vrSelectedIndices     = [];
+  session.trialStartMs  = performance.now();
+
+  targetFigureGroup.build(t.positions, false, t.targetQuat);
+  for(let i=0; i<4; i++) {
+    optionCells[i].build();
+    optionCells[i].clearStates();
+    const q = new THREE.Quaternion().multiplyQuaternions(align2DQuat, t.options[i].quat);
+    optionFigureGroups[i].build(t.positions, t.options[i].mirrored, q);
+  }
+  vr_rebuildInteractables();
+  submitButton.setEnabled(false);
+  vr_updateSelectionPanel();
+  vr_updateHUD();
+}
+
+function vr_rebuildInteractables() {
+  interactables = optionCells.map(c => c.mesh)
+    .concat([submitButton.mesh, tutorialNextBtn.mesh, dlJsonBtn.mesh, dlCsvBtn.mesh]);
+  // Also register live 3D option figure meshes — map them to their OptionCell so trigger/hover work.
+  optionFigureGroups.forEach((fg, i) => {
+    fg.getMeshes().forEach(m => {
+      interactables.push(m);
+      hoveredMap.set(m, optionCells[i]);
+    });
+  });
+}
+
+function vr_updateHUD() {
+  const t = session.currentTrial;
+  if(!t) return;
+  const blockName = session.currentBlock === 'practice' ? 'Test Block' : 'Main Block';
+  const total     = vr_currentTrials().length;
+  const timerStr  = session.currentBlock === 'practice' ? '' : vr_formatTimer(vrTimerSeconds);
+  hudPanel.update([`${blockName}  |  Trial ${t.trialNum} / ${total}`, timerStr], { fontSize: 28 });
+}
+
+function vr_updateSelectionPanel() {
+  selectionPanel.update([`Select 2 answers  (${vrSelectedIndices.length} selected)`]);
+}
+
+function toggleVRSelection(idx) {
+  if(idx < 0 || idx > 3) return;
+  const pos = vrSelectedIndices.indexOf(idx);
+  if(pos >= 0) {
+    vrSelectedIndices.splice(pos, 1);
+    optionCells[idx].setSelected(false);
+  } else if(vrSelectedIndices.length < 2) {
+    vrSelectedIndices.push(idx);
+    optionCells[idx].setSelected(true);
+  }
+  submitButton.setEnabled(vrSelectedIndices.length === 2);
+  vr_updateSelectionPanel();
+}
+
+function vr_submitTrial() {
+  const t = session.currentTrial;
+  if(!t || vrSelectedIndices.length !== 2) return;
+  t.responseMs    = Math.round(performance.now() - session.trialStartMs);
+  t.selectedSlots = [...vrSelectedIndices];
+  const sel = [...vrSelectedIndices].sort((a,b)=>a-b);
+  const cor = [...t.correctSlots].sort((a,b)=>a-b);
+  t.correct = (sel[0]===cor[0] && sel[1]===cor[1]);
+  session.allTrials.push({...t});
+
+  if(t.isPractice) {
+    for(let i=0; i<4; i++) {
+      const isCorrect   = t.correctSlots.includes(i);
+      const wasSelected = vrSelectedIndices.includes(i);
+      if(isCorrect)       optionCells[i].setFeedback('correct');
+      else if(wasSelected) optionCells[i].setFeedback('wrong');
+    }
+    setTimeout(() => {
+      optionCells.forEach(c => c.setFeedback(null));
+      vr_advanceTrial(false);
+    }, 1600);
+  } else {
+    vr_advanceTrial(false);
+  }
+}
+
+function vr_advanceTrial(timedOut) {
+  session.trialIndex++;
+  const trials = vr_currentTrials();
+  if(session.trialIndex >= trials.length || timedOut) {
+    vr_endBlock();
+    return;
+  }
+  if(CONFIG.FIXATION_CROSS) {
+    vr_showFixation(() => vr_loadTrial(trials[session.trialIndex]));
+  } else {
+    vr_loadTrial(trials[session.trialIndex]);
+  }
+}
+
+function vr_showFixation(cb) {
+  vr_setTrialElementsVisible(false);
+  fixationPanel.mesh.visible = true;
+  setTimeout(() => {
+    fixationPanel.mesh.visible = false;
+    vr_setTrialElementsVisible(true);
+    cb();
+  }, CONFIG.FIXATION_MS);
+}
+
+function vr_endBlock() {
+  clearInterval(vrTimerIv); vrTimerIv = null;
+  if(session.currentBlock === 'practice') {
+    vr_beginBlock('A');
+  } else {
+    vr_showDebrief();
+  }
+}
+
+function vr_timeUp() { vr_advanceTrial(true); }
+
+function vr_startTimer(sec) {
+  vrTimerSeconds = sec;
+  clearInterval(vrTimerIv);
+  vrTimerIv = setInterval(() => {
+    vrTimerSeconds--;
+    vr_updateHUD();
+    if(vrTimerSeconds <= 0) { clearInterval(vrTimerIv); vrTimerIv=null; vr_timeUp(); }
+  }, 1000);
+}
+
+function vr_formatTimer(s) {
+  return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+}
+
+function vr_showDebrief() {
+  vr_setTrialElementsVisible(false);
+
+  const aTrials = session.allTrials.filter(t => t.block === 'A');
+  const score   = aTrials.filter(t => t.correct).length;
+  const rts     = aTrials.filter(t => t.responseMs).map(t => t.responseMs);
+  const meanRT  = rts.length ? Math.round(rts.reduce((s,v)=>s+v,0)/rts.length) : 0;
+  const medRT   = rts.length ? computeMedian(rts) : 0;
+
+  debriefPanel.update([
+    'SESSION COMPLETE', '',
+    `Score:       ${score} / ${CONFIG.TRIALS_PER_BLOCK}`,
+    `Completed:   ${aTrials.length} / ${CONFIG.TRIALS_PER_BLOCK} trials`,
+    `Mean RT:     ${(meanRT/1000).toFixed(2)} s`,
+    `Median RT:   ${(medRT/1000).toFixed(2)} s`,
+    '', 'Point at the buttons below to export data.',
+  ], { fontSize: 26 });
+
+  debriefPanel.mesh.visible = true;
+  dlJsonBtn.group.visible   = true;
+  dlCsvBtn.group.visible    = true;
+  vr_rebuildInteractables();
+
+  // Fire-and-forget submit to Google Sheets
+  submitResult(buildLog()).catch(() => {});
+}
+
+/* ================================================================
+   VR RENDER LOOP
+   ================================================================ */
+function renderLoop(time, frame) {
+  updateGrab();
+  updateJoystickRotation();
+
+  if(tutorialAutoRotate && targetFigureGroup) {
+    const rot = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0.3, 1, 0.1).normalize(), 0.008
+    );
+    targetFigureGroup.group.quaternion.multiply(rot);
+  }
+
+  if(vrRenderer.xr.isPresenting) {
+    let hit = null;
+    if(ctrl0) hit = updateRaycast(ctrl0);
+    if(!hit && ctrl1) hit = updateRaycast(ctrl1);
+    updateHover(hit);
+    if(hand0) updateHandTracking(hand0, 0);
+    if(hand1) updateHandTracking(hand1, 1);
+  }
+
+  vrRenderer.render(vrScene, vrCamera);
+}
+
+/* ================================================================
+   LAZY VR INITIALISATION  (called once from introNext for VR)
+   ================================================================ */
+function initVR() {
+  if (vrRenderer) return;  // idempotent
+
+  const canvas = document.getElementById('vr-canvas');
+  vrScene    = new THREE.Scene();
+  vrScene.background = new THREE.Color(0x555555);
+  vrCamera   = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 100);
+  vrCamera.position.set(0, 1.6, 0);
+  vrScene.add(vrCamera);
+
+  vrRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  vrRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  vrRenderer.xr.enabled = true;
+  vrRenderer.xr.setReferenceSpaceType('local-floor');
+  vrRenderer.setSize(window.innerWidth, window.innerHeight);
+
+  vrScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+  dirLight.position.set(3, 8, 5);
+  vrScene.add(dirLight);
+  vrScene.add(new THREE.GridHelper(6, 12, 0x444444, 0x333333));
+
+  window.addEventListener('resize', () => {
+    vrCamera.aspect = window.innerWidth / window.innerHeight;
+    vrCamera.updateProjectionMatrix();
+    vrRenderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  buildScene();
+  setupControllers();
+  registerAllInteractables();
+  checkXRSupport();
+  vrRenderer.setAnimationLoop(renderLoop);
+
+  // Attach the Enter VR button handler
+  document.getElementById('enter-vr-btn').addEventListener('click', async () => {
+    const canvas = document.getElementById('vr-canvas');
+    canvas.style.display = 'block';
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    try {
+      const xrSession = await navigator.xr.requestSession('immersive-vr', {
+        requiredFeatures: ['local'],
+        optionalFeatures: ['local-floor', 'hand-tracking', 'bounded-floor'],
+      });
+      await vrRenderer.xr.setSession(xrSession);
+      showTutorial();
+    } catch(e) {
+      canvas.style.display = 'none';
+      showScreen('screen-vr-ready');
+      document.getElementById('vr-status').textContent = 'Failed: ' + e.message;
+    }
+  });
+}
+
+function checkXRSupport() {
+  if(!navigator.xr) {
+    const btn = document.getElementById('enter-vr-btn');
+    btn.textContent = 'WebXR not available on this device';
+    btn.disabled    = true;
+    return;
+  }
+  navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+    const btn = document.getElementById('enter-vr-btn');
+    if(supported) {
+      btn.textContent   = '▶  Enter VR';
+      btn.disabled      = false;
+      btn.style.background  = '#4a90e2';
+      btn.style.boxShadow   = '0 0 24px rgba(74,144,226,0.7)';
+    } else {
+      btn.textContent = 'VR Not Supported on This Device';
+      btn.disabled    = true;
+    }
+  });
+}
+
+/* ================================================================
+   DATA EXPORT  (unified for all conditions)
+   ================================================================ */
+function buildLog() {
+  const aTrials = session.allTrials.filter(t => t.block === 'A');
+  return {
+    schema_version:    '2.0',
+    condition:         session.condition,
+    sector:            session.sector,
+    role:              session.role,
+    participant_id:    session.participantId,
+    session_start:     session.startTime,
+    session_end:       new Date().toISOString(),
+    config:            { ...CONFIG },
+    scores: {
+      block_A:       aTrials.filter(t => t.correct).length,
+      total:         aTrials.filter(t => t.correct).length,
+      max_possible:  CONFIG.TRIALS_PER_BLOCK,
+    },
+    reaction_times: {
+      mean_ms:   Math.round(
+        session.allTrials.filter(t => !t.isPractice && t.responseMs)
+          .reduce((s,t,_,a) => s + t.responseMs/a.length, 0)),
+      median_ms: computeMedian(
+        session.allTrials.filter(t => !t.isPractice && t.responseMs).map(t => t.responseMs)),
+    },
+    strategy_response: (session.condition === 'VR' || session.condition === 'VR-NR')
+      ? 'VR condition — text input unavailable'
+      : (document.getElementById('strategy')?.value || ''),
+    trials: session.allTrials.map(t => ({
+      block:                 t.block,
+      trial_number:          t.trialNum,
+      figure_id:             t.figIdx,
+      correct_option_slots:  t.correctSlots,
+      selected_option_slots: t.selectedSlots,
+      options_mirrored:      t.options.map(o => o.mirrored),
+      response_time_ms:      t.responseMs,
+      is_correct:            t.correct,
+      is_practice:           t.isPractice,
+    })),
+  };
+}
+
+function exportJSON() {
+  dl(new Blob([JSON.stringify(buildLog(), null, 2)], {type:'application/json'}),
+     `mrt_${session.participantId}_${ts()}.json`);
+}
+
+function exportCSV() {
+  const hdr = ['condition','participant_id','sector','role','block','trial_number','figure_id',
+               'correct_slots','selected_slots','response_time_ms','is_correct',
+               'opt0_mirror','opt1_mirror','opt2_mirror','opt3_mirror'];
+  const rows = session.allTrials
+    .filter(t => !t.isPractice)
+    .map(t => [
+      session.condition, session.participantId, session.sector, session.role,
+      t.block, t.trialNum, t.figIdx,
+      `"${t.correctSlots.join(';')}"`, `"${t.selectedSlots.join(';')}"`,
+      t.responseMs, t.correct ? 1 : 0,
+      ...t.options.map(o => o.mirrored ? 1 : 0),
+    ]);
+  const csv = [hdr, ...rows].map(r => r.join(',')).join('\n');
+  dl(new Blob([csv], {type:'text/csv'}), `mrt_${session.participantId}_${ts()}.csv`);
+}
+
+/* ================================================================
+   SCREEN MANAGEMENT
+   ================================================================ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-trial').classList.remove('active');
+  if (id === 'screen-trial') {
+    document.getElementById('screen-trial').classList.add('active');
+  } else {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
+  }
+}
+
+/* ----------------------------------------------------------------
+   selectCondition  — sets session.condition and shows screen-intro
+   ---------------------------------------------------------------- */
+function selectCondition(cond) {
+  session.condition = cond;
+
+  const desc = {
+    '2D': `<p>You will see a <strong>static 3D target shape</strong> and 4 answer options.
+            You cannot rotate that shape. Your goal is to select the 2 answer options
+            that are the same as the target shape. Only 2 are correct, the other 2 are
+            mirrored images.</p>
+            <p>You will get 2 practice trials and 5 main trials. The score is only visible at the end.</p>`,
+    '3D': `<p>You will see a <strong>3D target shape</strong> which you can <strong>click and drag
+            to rotate</strong>. Your goal is to select the 2 answer options that are the same
+            as the target shape. Only 2 are correct, the other 2 are mirrored images.</p>
+            <p>You will get 2 practice trials and 5 main trials. The score is only visible at the end.</p>`,
+    'VR': `<p>This session will run in your <strong>VR headset</strong>. Open this page in the
+            <strong>Meta Quest Browser</strong>, then click <em>Enter VR</em>.</p>`,
+    'VR-NR': `<p>This session will run in your <strong>VR headset</strong>. The target shape is
+               <strong>fixed</strong> — it cannot be rotated. Open this page in the
+               <strong>Meta Quest Browser</strong>, then click <em>Enter VR</em>.</p>`,
+  }[cond];
+
+  document.getElementById('intro-desc').innerHTML = desc || '';
+
+  const listHTML = {
+    '2D': `
+      <li>The target is shown at a fixed orientation — <strong>study it carefully</strong>.</li>
+      <li>Press <span class="kbd">A</span> <span class="kbd">B</span> <span class="kbd">C</span> <span class="kbd">D</span> or click an option to toggle selection.</li>
+      <li>Press <span class="kbd">Enter</span> or click <strong>Submit</strong> once you have selected exactly two answers.</li>
+      <li>You <strong>cannot</strong> go back to a previous trial.</li>`,
+    '3D': `
+      <li><strong>Rotate the target</strong> by clicking and dragging on it.</li>
+      <li>Click <strong>↺ Reset</strong> to snap the target back to its starting orientation.</li>
+      <li>Press <span class="kbd">A</span> <span class="kbd">B</span> <span class="kbd">C</span> <span class="kbd">D</span> or click an option to toggle selection.</li>
+      <li>Press <span class="kbd">Enter</span> or click <strong>Submit</strong> once you have selected exactly two answers.</li>
+      <li>You <strong>cannot</strong> go back to a previous trial.</li>`,
+    'VR': `
+      <li>Use the <strong>trigger</strong> to select answer options and press buttons.</li>
+      <li><strong>Grip</strong> near the target shape and move your hand to rotate it — same direction as mouse drag (not inverted).</li>
+      <li><strong>Right joystick</strong>: horizontal → Y axis (yaw) &nbsp;·&nbsp; vertical → X axis (pitch) &nbsp;·&nbsp; <strong>Left joystick</strong>: horizontal → Z axis (roll).</li>
+      <li>Select exactly <strong>two</strong> matching options, then point at <em>SUBMIT</em> and pull the trigger.</li>`,
+    'VR-NR': `
+      <li>Use the <strong>trigger</strong> to select answer options and press buttons.</li>
+      <li>The target shape is <strong>fixed</strong> and cannot be rotated.</li>
+      <li>Select exactly <strong>two</strong> matching options, then point at <em>SUBMIT</em> and pull the trigger.</li>`,
+  }[cond] || '';
+
+  document.getElementById('instruction-list').innerHTML = listHTML;
+
+  showScreen('screen-intro');
+
+  // Enable Continue only when sector and role are filled (PID is auto-generated)
+  const recheck = () => {
+    const sector = document.getElementById('sector').value;
+    const role   = document.getElementById('role').value.trim();
+    document.getElementById('intro-btn').disabled = !(sector && role);
+  };
+  document.getElementById('sector').addEventListener('change', recheck);
+  document.getElementById('role').addEventListener('input', recheck);
+  recheck();
+}
+
+/* ----------------------------------------------------------------
+   introNext  — validate fields, branch by condition
+   ---------------------------------------------------------------- */
+function introNext() {
+  const sector = document.getElementById('sector').value;
+  const role   = document.getElementById('role').value.trim();
+  if (!sector) {
+    document.getElementById('sector').style.borderColor = 'var(--wrong)';
+    document.getElementById('sector').focus();
+    return;
+  }
+  if (!role) {
+    document.getElementById('role').style.borderColor = 'var(--wrong)';
+    document.getElementById('role').focus();
+    return;
+  }
+
+  // Auto-generate a unique participant ID (timestamp + random suffix)
+  session.participantId = 'P-' + Date.now().toString(36).toUpperCase()
+                        + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+  session.sector        = sector;
+  session.role          = role;
+  session.startTime     = new Date().toISOString();
+
+  if (session.condition === 'VR' || session.condition === 'VR-NR') {
+    initVR();  // lazy-create VR renderer (idempotent)
+    showScreen('screen-vr-ready');
+  } else {
+    CONFIG.ROTATION_ENABLED = (session.condition === '3D');
+    // Show/hide reset button based on rotation
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) resetBtn.style.display = CONFIG.ROTATION_ENABLED ? '' : 'none';
+    generateTrials();
+    initRenderers();
+    showScreen('screen-instructions');
+  }
+}
+
+/* ================================================================
+   DOM TRIAL MACHINE  (2D / 3D conditions)
+   ================================================================ */
+function beginPractice() {
+  if (!CONFIG.PRACTICE_ENABLED) { beginBlock('A'); return; }
+  session.currentBlock = 'practice';
+  session.trialIndex   = 0;
+  showScreen('screen-trial');
+  startRAF();
+  loadTrial(currentTrials()[0]);
+  document.getElementById('timer-display').textContent = 'Test Block';
+}
+
+function beginBlock(block) {
+  session.currentBlock = block;
+  session.trialIndex   = 0;
+  showScreen('screen-trial');
+  startRAF();
+  loadTrial(currentTrials()[0]);
+  startTimer(CONFIG.TIME_LIMIT_SECONDS);
+}
+
+function currentTrials() {
+  if (session.currentBlock === 'practice') return session.practiceTrials;
+  if (session.currentBlock === 'A')        return session.blockATrials;
+  return session.blockBTrials;
+}
+
+function startTimer(sec) {
+  clearInterval(session.timerIv);
+  let rem = sec;
+  const el = document.getElementById('timer-display');
+  el.classList.remove('warn');
+  updateTimerEl(el, rem);
+  session.timerIv = setInterval(() => {
+    rem--;
+    updateTimerEl(el, rem);
+    if (rem <= 30) el.classList.add('warn');
+    if (rem <= 0) { clearInterval(session.timerIv); timeUp(); }
+  }, 1000);
+}
+
+function updateTimerEl(el, sec) {
+  const m = String(Math.floor(sec/60)).padStart(2,'0');
+  const s = String(sec % 60).padStart(2,'0');
+  el.textContent = `${m}:${s}`;
+}
+
+function timeUp() { advanceTrial(true); }
+
+function loadTrial(t) {
+  trial = t;
+  trial.selectedSlots = [];
+  session.trialStartMs = performance.now();
+
+  const blockName = { practice: 'Test Block', A: 'Main Block' }[session.currentBlock];
+  document.getElementById('block-label').textContent   = blockName;
+  document.getElementById('trial-progress').textContent =
+    `Trial ${t.trialNum} of ${currentTrials().length}`;
+
+  for (let i = 0; i < 4; i++) {
+    document.getElementById(`ow-${i}`).className = 'opt-wrap';
+    document.getElementById(`oc-${i}`).className = 'figure-container';
+  }
+  updateFooter();
+  document.getElementById('submit-btn').disabled = true;
+  hideFeedback();
+
+  ['tc','oc-0','oc-1','oc-2','oc-3'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('entering');
+    void el.offsetWidth;
+    el.classList.add('entering');
+  });
+
+  figureRenderers[0].setFigure(t.positions, false, t.targetQuat);
+  for (let i = 0; i < 4; i++) {
+    const opt = t.options[i];
+    figureRenderers[i+1].setFigure(t.positions, opt.mirrored, opt.quat);
+  }
+}
+
+function handleOptClick(idx, e) {
+  if (e.target.classList.contains('reset-btn')) return;
+  toggleOpt(idx);
+}
+
+function toggleOpt(idx) {
+  if (!trial) return;
+  const sel = trial.selectedSlots;
+  const pos = sel.indexOf(idx);
+  if (pos >= 0) {
+    sel.splice(pos, 1);
+  } else {
+    if (sel.length < 2) sel.push(idx);
+  }
+  for (let i = 0; i < 4; i++) {
+    const ow = document.getElementById(`ow-${i}`);
+    const oc = document.getElementById(`oc-${i}`);
+    ow.classList.toggle('selected', sel.includes(i));
+    oc.classList.toggle('selected', sel.includes(i));
+  }
+  updateFooter();
+  document.getElementById('submit-btn').disabled = sel.length !== 2;
+}
+
+function updateFooter() {
+  const n = trial ? trial.selectedSlots.length : 0;
+  document.getElementById('selection-info').textContent = `Select 2 answers (${n} selected)`;
+}
+
+function submitTrial() {
+  if (!trial || trial.selectedSlots.length !== 2) return;
+  trial.responseMs = Math.round(performance.now() - session.trialStartMs);
+  const sel = [...trial.selectedSlots].sort((a,b)=>a-b);
+  const cor = [...trial.correctSlots ].sort((a,b)=>a-b);
+  trial.correct = (sel[0] === cor[0] && sel[1] === cor[1]);
+  session.allTrials.push({...trial});
+
+  if (trial.isPractice) {
+    for (let i = 0; i < 4; i++) {
+      const isCorrectOpt = trial.correctSlots.includes(i);
+      const wasSelected  = trial.selectedSlots.includes(i);
+      const ow = document.getElementById(`ow-${i}`);
+      const oc = document.getElementById(`oc-${i}`);
+      ow.classList.remove('selected'); oc.classList.remove('selected');
+      if (isCorrectOpt)     { ow.classList.add('fb-correct'); oc.classList.add('feedback-correct'); }
+      else if (wasSelected) { ow.classList.add('fb-wrong');   oc.classList.add('feedback-wrong');   }
+    }
+    showFeedback(trial.correct);
+    setTimeout(() => { hideFeedback(); advanceTrial(false); }, 1600);
+  } else {
+    advanceTrial(false);
+  }
+}
+
+function showFeedback(ok) {
+  const el = document.getElementById('feedback-banner');
+  el.textContent = ok ? '✓ Correct!' : '✗ Incorrect — the two correct options are highlighted in green';
+  el.className = `show ${ok ? 'ok' : 'err'}`;
+}
+
+function hideFeedback() {
+  document.getElementById('feedback-banner').className = '';
+}
+
+function advanceTrial(timedOut) {
+  session.trialIndex++;
+  const trials = currentTrials();
+  if (session.trialIndex >= trials.length || timedOut) { endBlock(); return; }
+  const next = trials[session.trialIndex];
+  if (CONFIG.FIXATION_CROSS) {
+    showFixation(() => loadTrial(next));
+  } else {
+    loadTrial(next);
+  }
+}
+
+function showFixation(cb) {
+  const d = document.createElement('div');
+  d.className = 'fixation-overlay';
+  d.textContent = '+';
+  document.body.appendChild(d);
+  setTimeout(() => { document.body.removeChild(d); cb(); }, CONFIG.FIXATION_MS);
+}
+
+function endBlock() {
+  clearInterval(session.timerIv);
+  document.getElementById('timer-display').classList.remove('warn');
+  if (session.currentBlock === 'practice') {
+    beginBlock('A');
+  } else {
+    stopRAF();
+    showDebrief();
+  }
+}
+
+function resetFig(idx) {
+  if (figureRenderers[idx]) figureRenderers[idx].resetRotation();
+}
+
+/* ================================================================
+   DOM DEBRIEF  (2D / 3D)  — auto-submits to Google Sheets
+   ================================================================ */
+async function showDebrief() {
+  showScreen('screen-debrief');
+
+  const aTrials = session.allTrials.filter(t => t.block === 'A');
+  const score   = aTrials.filter(t => t.correct).length;
+  const rts     = aTrials.filter(t => t.responseMs).map(t => t.responseMs);
+  const meanRT  = rts.length ? Math.round(rts.reduce((s,v)=>s+v,0) / rts.length) : 0;
+  const medRT   = rts.length ? computeMedian(rts) : 0;
+
+  document.getElementById('score-grid').innerHTML = `
+    <div class="score-card"><div class="val">${score}/${CONFIG.TRIALS_PER_BLOCK}</div><div class="lbl">Score</div></div>
+    <div class="score-card"><div class="val">${aTrials.length}/${CONFIG.TRIALS_PER_BLOCK}</div><div class="lbl">Trials Completed</div></div>
+    <div class="score-card"><div class="val">${(meanRT/1000).toFixed(1)}s</div><div class="lbl">Mean RT</div></div>
+    <div class="score-card"><div class="val">${(medRT/1000).toFixed(1)}s</div><div class="lbl">Median RT</div></div>
+  `;
+
+  const statusEl = document.getElementById('save-status');
+  statusEl.textContent = 'Saving results…';
+  try {
+    await submitResult(buildLog());
+    statusEl.textContent = '✓ Results saved';
+  } catch(e) {
+    statusEl.textContent = '⚠ Save failed — use Export buttons below';
+  }
+}
+
+/* ================================================================
+   KEYBOARD SHORTCUTS  (2D / 3D)
+   ================================================================ */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const trialActive = document.getElementById('screen-trial').classList.contains('active');
+  if (trialActive) {
+    const map = { a:0, b:1, c:2, d:3, A:0, B:1, C:2, D:3 };
+    if (e.key in map) { toggleOpt(map[e.key]); return; }
+    if (e.key === 'Enter') {
+      const btn = document.getElementById('submit-btn');
+      if (!btn.disabled) submitTrial();
+    }
+  }
+});
+
+/* ================================================================
+   INIT
+   ================================================================ */
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    document.getElementById('loading').style.display = 'none';
+
+    // If a ?condition= param is present, skip condition-selection and go straight
+    // to the participant info screen. Matching is case-insensitive; several aliases
+    // are accepted so links like ?condition=VR-R or ?condition=desktop-nr also work.
+    const COND_ALIASES = {
+      '2d': '2D', 'desktop-nr': '2D', 'desktop_nr': '2D',
+      '3d': '3D', 'desktop-r':  '3D', 'desktop_r':  '3D',
+      'vr-nr': 'VR-NR', 'vr_nr': 'VR-NR',
+      'vr': 'VR', 'vr-r': 'VR', 'vr_r': 'VR',
+      // Randomly assign one of the two desktop conditions on each page load
+      'desktop-random': Math.random() < 0.5 ? '2D' : '3D',
+    };
+    const raw     = (new URLSearchParams(window.location.search).get('condition') || '').trim();
+    const urlCond = COND_ALIASES[raw.toLowerCase()];
+    if (urlCond) {
+      try {
+        selectCondition(urlCond);
+      } catch (e) {
+        console.error('[MRT] URL condition auto-select failed:', e);
+        showScreen('screen-condition');
+      }
+    } else {
+      showScreen('screen-condition');
+    }
+  }, 200);
+});
+
+/* ================================================================
+   EXPOSE FUNCTIONS USED BY HTML onclick ATTRIBUTES
+   ================================================================ */
+Object.assign(window, {
+  selectCondition,
+  introNext,
+  beginPractice,
+  beginBlock,
+  submitTrial,
+  handleOptClick,
+  resetFig,
+  exportJSON,
+  exportCSV,
+  downloadSheetCSV: _downloadSheetCSV,
+});
+</script>
+</body>
+</html>
