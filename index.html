@@ -548,43 +548,6 @@ function randomQuat() {
   ).normalize();
 }
 
-// ── Occlusion check ────────────────────────────────────────────────
-// Projects every cube centre through the desktop camera and rejects
-// orientations where any two projections are closer than OVERLAP_THRESHOLD.
-// This guarantees every cube is visually distinct in the static condition.
-const _camDir   = new THREE.Vector3(-3.5, -3.5, -8).normalize();
-const _camRight = new THREE.Vector3().crossVectors(_camDir, new THREE.Vector3(0, 1, 0)).normalize();
-const _camUp    = new THREE.Vector3().crossVectors(_camRight, _camDir).normalize();
-const OVERLAP_THRESHOLD = 0.55; // cubes are 1-unit spaced; < 0.55 means heavy overlap
-
-function isFullyVisible(positions, quat) {
-  let cx = 0, cy = 0, cz = 0;
-  for (const [x, y, z] of positions) { cx += x; cy += y; cz += z; }
-  cx /= positions.length; cy /= positions.length; cz /= positions.length;
-
-  const proj = positions.map(([x, y, z]) => {
-    const p = new THREE.Vector3(x - cx, y - cy, z - cz).applyQuaternion(quat);
-    return { u: p.dot(_camRight), v: p.dot(_camUp) };
-  });
-
-  for (let i = 0; i < proj.length; i++) {
-    for (let j = i + 1; j < proj.length; j++) {
-      const du = proj[i].u - proj[j].u;
-      const dv = proj[i].v - proj[j].v;
-      if (Math.sqrt(du * du + dv * dv) < OVERLAP_THRESHOLD) return false;
-    }
-  }
-  return true;
-}
-
-function visibleQuat(positions, baseTilts) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const q = baseTilts.clone().multiply(randomQuat());
-    if (isFullyVisible(positions, q)) return q;
-  }
-  return baseTilts.clone().multiply(randomQuat()); // fallback
-}
-
 function shuffle(arr) {
   for (let i = arr.length-1; i > 0; i--) {
     const j = Math.floor(rng()*(i+1));
@@ -596,23 +559,18 @@ function shuffle(arr) {
 /* ================================================================
    TRIAL GENERATION  (canonical VR version — resets arrays)
    ================================================================ */
-// Fixed tilt applied to every target shape (30° up + 40° right)
-const TARGET_TILT = new THREE.Quaternion()
-  .setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 6)          // 30° tilt up
-  .premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI * 2 / 9)); // 40° tilt right
-
-const IDENTITY_QUAT = new THREE.Quaternion(); // no tilt for options
-
 function makeTrial(figIdx, isPractice, num, block) {
   const slots = shuffle([0,1,2,3]);
   const correctSlots = [slots[0], slots[1]];
   const wrongSlots   = [slots[2], slots[3]];
-  const positions = BASE_FIGURES[figIdx];
   const optQuats = [randomQuat(), randomQuat(), randomQuat(), randomQuat()];
   return {
     figIdx,
-    positions,
-    targetQuat:    visibleQuat(positions, TARGET_TILT),
+    positions:     BASE_FIGURES[figIdx],
+    targetQuat:    new THREE.Quaternion()
+                     .setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 6) // 30° tilt up
+                     .premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI * 2 / 9))  // 40° tilt right
+                     .multiply(randomQuat()),
     options: optQuats.map((q, i) => ({
       quat:     q,
       mirrored: wrongSlots.includes(i),
